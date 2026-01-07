@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head><title>Phone Streamer</title></head>
+<body style="background:#000; color:white; text-align:center; font-family:sans-serif;">
+    <h2 style="color:#0f0;">PRO STREAMING CONSOLE</h2>
+    <video id="v" autoplay playsinline style="width:90%; border-radius:10px; transform: scaleX(-1);"></video>
+    <canvas id="c" style="display:none;"></canvas>
+    <div id="stat" style="margin:20px;">Connecting to Cloud...</div>
+    <button id="startBtn" style="padding:15px; background:#0f0; border:none; border-radius:5px; font-weight:bold;">START CAMERA</button>
+
+    <script>
+        const room = "mysecretroom123"; // You can change this
+        // YOUR LIVE RENDER URL (Note the wss://)
+        const ws = new WebSocket('wss://my-relay-server.onrender.com');
+        const video = document.getElementById('v');
+        const canvas = document.getElementById('c');
+        const stat = document.getElementById('stat');
+
+        document.getElementById('startBtn').onclick = async () => {
+            // 1. Request Camera and WakeLock (Keep screen on)
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            video.srcObject = stream;
+            if ('wakeLock' in navigator) await navigator.wakeLock.request('screen');
+            document.getElementById('startBtn').style.display = 'none';
+        };
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ type: "join", room: room, role: "phone" }));
+            stat.innerText = "READY - TAP START";
+            
+            // Send frames every 150ms
+            setInterval(() => {
+                if (video.srcObject) {
+                    canvas.width = 320;
+                    canvas.height = 240;
+                    canvas.getContext('2d').drawImage(video, 0, 0, 320, 240);
+                    ws.send(JSON.stringify({
+                        type: "frame",
+                        dataUrl: canvas.toDataURL('image/jpeg', 0.4) 
+                    }));
+                }
+            }, 150);
+        };
+
+        ws.onclose = () => { stat.innerText = "Connection Lost. Refresh."; };
+    </script>
+</body>
+</html>
