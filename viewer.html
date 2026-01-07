@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<body style="background:#222; color:white; text-align:center; font-family:sans-serif;">
+    <h2>REMOTE MONITOR</h2>
+    <div id="stat" style="margin-bottom:10px;">Connecting...</div>
+    
+    <img id="stream" style="width:90%; max-width:600px; border:3px solid #0f0; border-radius:10px; background:#000;">
+    
+    <div style="margin-top: 20px;">
+        <button id="recBtn" style="padding:15px; background:red; color:white; border:none; border-radius:5px; cursor:pointer;">START RECORDING</button>
+    </div>
+
+    <script>
+        const room = "mysecretroom123"; 
+        const ws = new WebSocket('wss://my-relay-server.onrender.com');
+        const img = document.getElementById('stream');
+        const recBtn = document.getElementById('recBtn');
+        
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ type: "join", room: room, role: "viewer" }));
+            document.getElementById('stat').innerText = "CONNECTED - Waiting for Phone...";
+        };
+
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            if (msg.type === "frame") {
+                img.src = msg.dataUrl;
+                document.getElementById('stat').innerText = "LIVE FEED ACTIVE";
+            }
+        };
+
+        // RECORDING LOGIC
+        recBtn.onclick = () => {
+            if (recBtn.innerText === "START RECORDING") {
+                recordedChunks = [];
+                // Create a video stream from the <img> tag
+                const stream = document.body.querySelector('canvas')?.captureStream() || img.ownerDocument.defaultView.HTMLCanvasElement.prototype.captureStream;
+                // Note: For simplicity, we are capturing the frames. 
+                // A better way is to use a Canvas to record:
+                startRecording();
+                recBtn.innerText = "STOP & SAVE";
+                recBtn.style.background = "black";
+            } else {
+                stopRecording();
+                recBtn.innerText = "START RECORDING";
+                recBtn.style.background = "red";
+            }
+        };
+
+        function startRecording() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const stream = canvas.captureStream(10); // 10 FPS
+            mediaRecorder = new MediaRecorder(stream);
+            
+            mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'stream-record.webm';
+                a.click();
+            };
+
+            mediaRecorder.start();
+
+            // Draw the incoming frames onto the recording canvas
+            const recordLoop = setInterval(() => {
+                if (mediaRecorder.state === "inactive") {
+                    clearInterval(recordLoop);
+                    return;
+                }
+                canvas.width = img.naturalWidth || 320;
+                canvas.height = img.naturalHeight || 240;
+                ctx.drawImage(img, 0, 0);
+            }, 100);
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+        }
+    </script>
+</body>
+</html>
